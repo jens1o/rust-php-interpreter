@@ -60,7 +60,7 @@ fn lex(input: &String) -> Result<Vec<Token>, String> {
     Ok(result)
 }
 
-fn eat_string<T: Iterator<Item = char>>(c: char, iter: &mut Peekable<T>) -> Type {
+fn eat_string<T: Iterator<Item = char>>(_c: char, iter: &mut Peekable<T>) -> Type {
     let mut string = String::new();
 
     while let Some(character) = iter.next() {
@@ -112,20 +112,59 @@ fn get_number<T: Iterator<Item = char>>(c: char, iter: &mut Peekable<T>) -> Type
 }
 
 fn main() {
-    // println!("{:?}", lex(&"4323 3".trim().to_owned()).unwrap());
-    let mut ast = lex(&"echo \"1236\"; echo ".trim().to_owned())
+    let input = "echo \"1236\";";
+
+    println!("{}", interpret(input));
+}
+
+fn interpret(input: &'static str) -> String {
+    let mut ast = lex(&input.trim().to_owned())
         .unwrap()
         .into_iter()
         .peekable();
+
+    let mut output = String::new();
 
     while let Some(node) = ast.peek() {
         if *node == Token::Expression(Expression::EchoExpression) {
             ast.next();
             if let Some(Token::Type(Type::String(string))) = ast.next() {
-                println!("Printing out the string: \"{}\"", string);
+                output.push_str(&string);
+                output.push_str("\n"); // FIXME: This is not as intended, as PHP just appends, except when PHP_EOL is used.
             }
         }
 
         ast.next();
+    }
+
+    output
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{lex, Expression, Token, Type};
+
+    #[test]
+    fn integer_parsing() {
+        let result = lex(&"1234".to_owned());
+
+        assert!(result.is_ok());
+
+        assert_eq!(result.unwrap(), vec![Token::Type(Type::Number(1234))]);
+    }
+
+    #[test]
+    fn basic_output() {
+        let result = lex(&"echo \"Hallo Welt\";".to_owned());
+
+        assert!(result.is_ok());
+
+        assert_eq!(
+            result.unwrap(),
+            vec![
+                Token::Expression(Expression::EchoExpression),
+                Token::Type(Type::String(String::from("Hallo Welt")))
+            ]
+        );
     }
 }

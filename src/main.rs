@@ -4,6 +4,7 @@ use std::iter::Peekable;
 enum Token {
     Type(Type),
     Expression(Expression),
+    Semicolon,
 }
 
 #[derive(Debug, PartialEq)]
@@ -28,12 +29,16 @@ fn lex(input: &String) -> Result<Vec<Token>, String> {
             '"' => {
                 it.next();
 
-                result.push(Token::Type(eat_string(c, &mut it)));
+                let string = Token::Type(eat_string(c, &mut it));
+
+                result.push(string);
             }
             'a'...'z' => {
                 it.next();
 
-                result.push(Token::Expression(eat_expression(c, &mut it)));
+                let expression = Token::Expression(eat_expression(c, &mut it));
+
+                result.push(expression);
             }
             '0'...'9' => {
                 it.next();
@@ -48,7 +53,11 @@ fn lex(input: &String) -> Result<Vec<Token>, String> {
                 result.push(LexItem::Paren(c));
                 it.next();
             }*/
-            ' ' | ';' => {
+            ' ' => {
+                it.next();
+            }
+            ';' => {
+                result.push(Token::Semicolon);
                 it.next();
             }
             _ => {
@@ -63,13 +72,24 @@ fn lex(input: &String) -> Result<Vec<Token>, String> {
 fn eat_string<T: Iterator<Item = char>>(_c: char, iter: &mut Peekable<T>) -> Type {
     let mut string = String::new();
 
-    while let Some(character) = iter.next() {
-        if character == '"' {
+    while let Some(character) = iter.peek() {
+        let mut c = *character;
+
+        if c == '\\' {
+            c = iter.next().unwrap(); // TODO: Handle Err()
+
+            // TODO: Handle \t, \n and so on.
+            // println!("Recognized escape sequence, escaped char: {}", c);
+        }
+        if c == '"' {
+            // early abort
+            iter.next();
             break;
         }
 
         // TODO: Panic when the character is not [a-zA-Z]
-        string.push_str(&character.to_string());
+        string.push_str(&c.to_string());
+        iter.next();
     }
 
     Type::String(string)
@@ -112,7 +132,7 @@ fn get_number<T: Iterator<Item = char>>(c: char, iter: &mut Peekable<T>) -> Type
 }
 
 fn main() {
-    let input = "echo \"1236\";";
+    let input = r##"echo "Hallo \\Welt";"##;
 
     println!("{}", interpret(input));
 }
@@ -130,7 +150,6 @@ fn interpret(input: &'static str) -> String {
             ast.next();
             if let Some(Token::Type(Type::String(string))) = ast.next() {
                 output.push_str(&string);
-                output.push_str("\n"); // FIXME: This is not as intended, as PHP just appends, except when PHP_EOL is used.
             }
         }
 
@@ -163,7 +182,24 @@ mod tests {
             result.unwrap(),
             vec![
                 Token::Expression(Expression::EchoExpression),
-                Token::Type(Type::String(String::from("Hallo Welt")))
+                Token::Type(Type::String(String::from("Hallo Welt"))),
+                Token::Semicolon
+            ]
+        );
+    }
+
+    #[test]
+    fn escaped_output() {
+        let result = lex(&r##"echo "Hallo \\Welt";"##.to_owned());
+
+        assert!(result.is_ok());
+
+        assert_eq!(
+            result.unwrap(),
+            vec![
+                Token::Expression(Expression::EchoExpression),
+                Token::Type(Type::String(String::from("Hallo \\Welt"))),
+                Token::Semicolon
             ]
         );
     }
